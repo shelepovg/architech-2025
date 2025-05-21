@@ -1,0 +1,124 @@
+@startuml
+' Диаграмма физической модели данных в нотации PlantUML Structure
+
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+hide empty members
+
+' === Основные сущности ===
+
+entity "clients" {
+  * client_id : UUID <<PK>>
+  --
+  type : VARCHAR(10) <<PHYSICAL|LEGAL>>
+  tax_id : VARCHAR(20) <<UNIQUE>>
+  name : VARCHAR(255)
+  phone : VARCHAR(20)
+  email : VARCHAR(100)
+  status : VARCHAR(20) <<ACTIVE|BLOCKED>>
+  created_at : TIMESTAMP
+}
+
+entity "wallets" {
+  * wallet_id : UUID <<PK>>
+  --
+  # client_id : UUID <<FK>>
+  balance : DECIMAL(20,2)
+  currency : VARCHAR(3) <<RUB>>
+  type : VARCHAR(10) <<ONLINE|OFFLINE>>
+  status : VARCHAR(20)
+  last_sync : TIMESTAMP
+}
+
+entity "transactions" {
+  * transaction_id : UUID <<PK>>
+  --
+  # wallet_id : UUID <<FK>>
+  amount : DECIMAL(20,2)
+  type : VARCHAR(20) <<PAYMENT|TRANSFER|TOPUP>>
+  status : VARCHAR(20)
+  cbr_ref : VARCHAR(50)
+  created_at : TIMESTAMP
+  completed_at : TIMESTAMP
+  metadata : JSONB
+}
+
+entity "reservations" {
+  * reservation_id : UUID <<PK>>
+  --
+  # wallet_id : UUID <<FK>>
+  amount : DECIMAL(20,2)
+  purpose : VARCHAR(50)
+  expires_at : TIMESTAMP
+  status : VARCHAR(20)
+  created_at : TIMESTAMP
+}
+
+entity "audit_log" {
+  * log_id : BIGSERIAL <<PK>>
+  --
+  entity_type : VARCHAR(50)
+  entity_id : UUID
+  action : VARCHAR(50)
+  changed_by : UUID
+  old_value : JSONB
+  new_value : JSONB
+  timestamp : TIMESTAMP
+}
+
+' === Аналитические таблицы ===
+
+entity "transactions_analytics" <<ClickHouse>> {
+  * transaction_id : UUID
+  --
+  wallet_id : UUID
+  amount : Decimal(20,2)
+  type : String
+  status : String
+  date : Date
+  merchant_id : Nullable(UUID)
+  region : String
+  device : String
+  processing_time_ms : UInt32
+}
+
+entity "balances_daily" <<ClickHouse>> {
+  * wallet_id : UUID
+  * date : Date
+  --
+  opening_balance : Decimal(20,2)
+  closing_balance : Decimal(20,2)
+  transactions_count : UInt32
+}
+
+' === Связи между таблицами ===
+
+clients ||--o{ wallets : "1:N"
+wallets ||--o{ transactions : "1:N"
+wallets ||--o{ reservations : "1:N"
+clients }o--|| audit_log : "changed_by"
+
+transactions .up.|> transactions_analytics : "CDC"
+wallets .up.|> balances_daily : "ETL"
+
+' === Легенда ===
+
+note top of clients
+<b>Основные таблицы:</b>
+PostgreSQL 14, HA Cluster
+end note
+
+note top of transactions_analytics
+<b>Аналитические таблицы:</b>
+ClickHouse, Distributed
+end note
+
+note right
+<b>Обозначения:</b>
+* - Первичный ключ
+# - Внешний ключ
+CDC - Change Data Capture
+ETL - Ежедневная выгрузка
+end note
+
+@enduml
