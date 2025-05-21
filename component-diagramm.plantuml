@@ -1,0 +1,86 @@
+@startuml
+!include <C4/C4_Component>
+!include <C4/C4_Container>
+
+title Компонентная архитектура банка-посредника (Цифровой рубль)
+
+' === Контейнеры ===
+Container_Boundary(bank, "Банк-посредник") {
+    ' ----- Frontend -----
+    Container(frontend, "Фронтенд-сервисы", "Kubernetes Ingress", "Маршрутизация запросов") {
+        Component(mobile_gw, "Mobile Gateway", "Go (Gin)", "API для мобильных приложений")
+        Component(web_gw, "Web Gateway", "Go (Fiber)", "API для веб-интерфейсов")
+        Component(merchant_gw, "Merchant Gateway", "Java (Vert.x)", "API для мерчантов")
+    }
+
+    ' ----- Бэкенд -----
+    Container(backend, "Бэкенд-сервисы", "Kubernetes Namespace", "Ядро системы") {
+        Component(auth_service, "Auth Service", "Java (Spring Security)", "OAuth2/OpenID Connect,  JWT-аутентификация,  Интеграция с ЕСИА")
+        
+        Component(wallet_service, "Wallet Service", "Go (GoKit)", "Управление балансами,  Офлайн-синхронизация,  gRPC API")
+        
+        Component(transaction_service, "Transaction Service", "Java (Quarkus)", "Обработка транзакций,  Поддержка QR/NFC,  Асинхронная обработка")
+        
+        Component(reservation_service, "Reservation Service", "Go (GoChi)", "Блокировка средств,  Офлайн-гарантии,  Синхронизация с ЦБ")
+        
+        Component(notification_service, "Notification Service", "Java (Micronaut)", "WebSocket/Push,  СМС/email-уведомления,  Шаблоны сообщений")
+    }
+
+    ' ----- Инфраструктура -----
+    Container(infra, "Инфраструктурные сервисы", "Kubernetes Namespace", "Общие сервисы") {
+        Component(kafka, "Message Broker", "Apache Kafka", "Транзакционные события,  Асинхронные команды,  Dead Letter Queue")
+        
+        Component(redis, "Cache Service", "Redis", "Сессии пользователей,  Временные кэши,  Rate limiting")
+        
+        Component(audit_service, "Audit Service", "Go (Echo)", "Логирование операций,  Подготовка отчетов,  Интеграция с ЦБ")
+    }
+
+    ' ----- Хранилища -----
+    ContainerDb(postgres, "Основное хранилище", "PostgreSQL + Patroni", " Клиенты/счета, Транзакции, Резервы")
+    
+    ContainerDb(clickhouse, "Аналитическое хранилище", "ClickHouse", " История операций, Агрегаты для отчетов")
+}
+
+' === Внешние системы ===
+System_Ext(cbr_gateway, "API ЦБ РФ", "FPS/Soap")
+System_Ext(esia, "ЕСИА", "OAuth2")
+System_Ext(merchants, "Мерчанты", "REST/ISO8583")
+
+' === Связи ===
+' Внешние интеграции
+Rel(mobile_gw, auth_service, "Проверка токенов", "gRPC")
+Rel(web_gw, auth_service, "Проверка токенов", "gRPC")
+Rel(auth_service, esia, "Верификация пользователей", "OAuth2")
+
+' Транзакционный поток
+Rel(merchant_gw, transaction_service, "Инициирование платежа", "REST")
+Rel(transaction_service, wallet_service, "Проверка баланса", "gRPC")
+Rel(transaction_service, reservation_service, "Блокировка средств", "gRPC")
+Rel(transaction_service, kafka, "Событие транзакции", "Avro")
+Rel(kafka, cbr_gateway, "Выгрузка в ЦБ", "Async (Kafka Connect)")
+
+' Асинхронные взаимодействия
+Rel(wallet_service, kafka, "События баланса", "Protobuf")
+Rel(reservation_service, kafka, "События резерва", "Protobuf")
+Rel(kafka, audit_service, "Логирование операций", "Consumer Group")
+
+' Хранение данных
+Rel(auth_service, postgres, "CRUD пользователей", "JDBC")
+Rel(wallet_service, postgres, "Обновление балансов", "JDBC")
+Rel(audit_service, clickhouse, "Выгрузка данных", "Bulk Insert")
+
+' Особые интеграции
+Rel(transaction_service, merchants, "Подтверждение платежа", "Sync REST")
+Rel(audit_service, cbr_gateway, "Регуляторная отчетность", "SFTP")
+
+' === Технологический стек ===
+note right
+  <b>Импортозамещенный стек:</b>
+  • Языки: Go, Java (OpenJDK)
+  • БД: PostgreSQL, ClickHouse
+  • Брокер: Apache Kafka
+  • Кэш: Redis
+  • Оркестрация: Kubernetes
+  • Мониторинг: Prometheus + Grafana
+end note
+@enduml
