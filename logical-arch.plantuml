@@ -1,0 +1,74 @@
+@startuml
+skinparam classAttributeIconSize 0
+hide circle
+
+abstract class Client {
+  идентификатор_клиента
+  ИНН
+  контактные_данные
+}
+
+class PhysicalClient {
+  ФИО
+}
+
+class LegalClient {
+  наименование
+}
+
+Client <|-- PhysicalClient
+Client <|-- LegalClient
+
+class DigitalWallet {
+  идентификатор_кошелька
+  остаток_средств
+  статус : активен/заблокирован
+  тип_кошелька : онлайн/офлайн
+}
+
+Client "1" -- "0..*" DigitalWallet : привязка
+
+class ClientAccount {
+  идентификатор_счета
+  остаток_средств
+  валюта_счета
+}
+
+Client "1" -- "0..*" ClientAccount : привязка
+
+class PaymentOrder {
+  идентификатор_поручения
+  тип_операции : оплата, перевод, пополнение
+  сумма
+  дата_и_время_создания
+  статус_исполнения
+}
+
+PaymentOrder "1" -- "1..2" ClientAccount : счет_списания/зачисления
+
+class Transaction {
+  идентификатор_транзакции
+  дата_и_время
+  сумма
+  статус
+}
+
+Transaction --> PaymentOrder : связь с поручением
+
+class ProductService {
+  идентификатор
+  наименование
+  категория
+  стоимость
+}
+
+class Message {
+  идентификатор_сообщения
+  тип_сообщения
+  дата_и_время_отправки
+}
+
+Message "1" --> "1" Client : отправитель
+Message "1" --> "1" Client : получатель
+
+@enduml
