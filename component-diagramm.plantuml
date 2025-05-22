@@ -50,6 +50,7 @@ System_Ext(merchants, "Мерчанты", "REST/ISO8583")
 ' Внешние интеграции
 Rel(mobile_gw, auth_service, "Проверка токенов", "gRPC")
 Rel(web_gw, auth_service, "Проверка токенов", "gRPC")
+Rel(merchant_gw, auth_service, "Проверка токенов", "gRPC")
 Rel(auth_service, esia, "Верификация пользователей", "OAuth2")
 
 ' Транзакционный поток
