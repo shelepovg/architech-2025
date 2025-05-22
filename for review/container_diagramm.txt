@@ -1,0 +1,98 @@
+@startuml
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+title Архитектура системы цифрового рубля (C4 Container)
+
+' === Акторы ===
+Person(physical_client, "Физическое лицо", "Клиент с цифровым рублевым кошельком")
+Person(legal_client, "Юридическое лицо", "Бизнес-клиент (мерчант)")
+Person(bank_operator, "Оператор банка", "Администратор банка-посредника")
+
+' === Системные границы ===
+System_Boundary(bank_system, "Банк-посредник") {
+    System_Boundary(mobile, "Мобильное приложение") {
+        Container(mobile_app, "Мобильное приложение", "Kotlin/Swift", "Включает онлайн/офлайн режимы")
+        Container(offline_wallet, "Оффлайн Кошелек", $sprite="&folder,scale=5.0,color=gray")
+    }
+    Container(web_app, "Веб-кабинет", "React", "Управление ЦФР для физ.лиц")
+    Container(merchant_portal, "Портал мерчанта", "Angular", "Касса и отчетность для юр.лиц")
+    
+    Container(auth_service, "Сервис аутентификации", "Keycloak", "OAuth2/OpenID, Connect, Интеграция с ЕСИА")
+    
+    Container(payment_api, "Платежный шлюз", "Java/Spring", "Обработка транзакций,  Маршрутизация запросов, Поддержка QR/NFC")
+    
+    Container(wallet_service, "Сервис кошельков", "Kotlin", " Управление онлайн-кошельками, Синхронизация офлайн-транзакций")
+    
+    Container(reservation_service, "Сервис резервирования", "Java", " Блокировка средств для офлайн-операций, Сверка с ЦБ")
+    
+    Container(crypto_service, "Криптографический сервис", "HSM", " Хранение ключей, Подпись транзакций, PKCS#11")
+    
+    Container(audit_service, "Сервис аудита", "Python", " Логирование операций, Формирование отчетов для ЦБ")
+    
+    ' Базы данных
+    ContainerDb(main_db, "Основная БД", "PostgreSQL 14", " Клиенты, Счета, Транзакции")
+    
+    ContainerDb(reservation_db, "База резервов", "PostgreSQL", " Офлайн-холды, Временные блокировки")
+    
+    ContainerDb(dwh, "Хранилище данных", "ClickHouse", "Аналитика операций")
+}
+
+System_Boundary(cbr_system, "Платформа ЦБ РФ") {
+    Container(cbr_gateway, "API шлюз ЦБ", "Java", " FPS API, Цифровые сертификаты")
+    
+    Container(blockchain_node, "Блокчейн-нода", "Hyperledger Fabric", " Валидация транзакций, Смарт-контракты")
+    
+    ContainerDb(cbr_ledger, "Реестр ЦФР", "CouchDB", " Все транзакции в стране, Прозрачный аудит")
+}
+
+' === Внешние системы ===
+System_Ext(merchant_acq, "Система эквайринга", "API мерчантов")
+System_Ext(gosuslugi, "ЕСИА", "API идентификации")
+
+' === Связи ===
+' Клиентские взаимодействия
+Rel(physical_client, mobile_app, "Платежи через QR/NFC", "HTTPS")
+Rel(physical_client, web_app, "Управление средствами", "HTTPS")
+Rel(legal_client, merchant_portal, "Прием платежей", "HTTPS")
+Rel(web_app, payment_api, "Управление средствами", "gRPC")
+Rel(mobile_app, payment_api, "Платежи через QR/NFC", "gRPC")
+Rel(merchant_portal, payment_api, "Прием платежей", "gRPC")
+
+
+' Банковская инфраструктура
+Rel(mobile_app, offline_wallet, "Офлайн-операции", "Local Storage")
+Rel(offline_wallet, reservation_service, "Синхронизация", "HTTPS (при соединении)")
+
+Rel(payment_api, wallet_service, "Управление кошельками", "gRPC")
+Rel(payment_api, reservation_service, "Резервирование средств", "gRPC")
+Rel(payment_api, crypto_service, "Подпись транзакций", "PKCS#11")
+
+Rel(wallet_service, main_db, "Хранение данных", "JDBC")
+Rel(reservation_service, reservation_db, "Фиксация холдов", "JDBC")
+
+' Интеграция с ЦБ
+Rel(payment_api, cbr_gateway, "Проведение операций", "FPS API")
+Rel(cbr_gateway, blockchain_node, "Регистрация в реестре", "gRPC")
+Rel(blockchain_node, cbr_ledger, "Запись транзакций", "Smart Contracts")
+
+' Дополнительные интеграции
+Rel(payment_api, merchant_acq, "Эквайринг", "ISO 8583\n(комиссия 0.3%)")
+
+' Безопасность
+Rel(auth_service, gosuslugi, "Верификация клиентов", "SOAP")
+Rel(mobile_app, auth_service, "Верификация клиентов", "gRPC")
+Rel(web_app, auth_service, "Верификация клиентов", "gRPC")
+Rel(merchant_portal, auth_service, "Верификация клиентов", "gRPC")
+
+' Аудит и аналитика
+Rel(audit_service, dwh, "Выгрузка данных", "ETL")
+Rel(audit_service, cbr_gateway, "Отчетность", "SFTP")
+
+' === Легенда и примечания ===
+note right of cbr_system
+  <b>Особенности ЦФР:</b>
+  • Прозрачность всех транзакций
+  • Офлайн-режим (по концепции ЦБ)
+end note
+@enduml

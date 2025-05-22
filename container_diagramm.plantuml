@@ -11,7 +11,10 @@ Person(bank_operator, "Оператор банка", "Администратор
 
 ' === Системные границы ===
 System_Boundary(bank_system, "Банк-посредник") {
-    Container(mobile_app, "Мобильное приложение", "Kotlin/Swift", "Включает онлайн/офлайн режимы")
+    System_Boundary(mobile, "Мобильное приложение") {
+        Container(mobile_app, "Мобильное приложение", "Kotlin/Swift", "Включает онлайн/офлайн режимы")
+        Container(offline_wallet, "Оффлайн Кошелек", $sprite="&folder,scale=5.0,color=gray")
+    }
     Container(web_app, "Веб-кабинет", "React", "Управление ЦФР для физ.лиц")
     Container(merchant_portal, "Портал мерчанта", "Angular", "Касса и отчетность для юр.лиц")
     
@@ -52,6 +55,10 @@ System_Ext(gosuslugi, "ЕСИА", "API идентификации")
 Rel(physical_client, mobile_app, "Платежи через QR/NFC", "HTTPS")
 Rel(physical_client, web_app, "Управление средствами", "HTTPS")
 Rel(legal_client, merchant_portal, "Прием платежей", "HTTPS")
+Rel(web_app, payment_api, "Управление средствами", "gRPC")
+Rel(mobile_app, payment_api, "Платежи через QR/NFC", "gRPC")
+Rel(merchant_portal, payment_api, "Прием платежей", "gRPC")
+
 
 ' Банковская инфраструктура
 Rel(mobile_app, offline_wallet, "Офлайн-операции", "Local Storage")
@@ -71,7 +78,12 @@ Rel(blockchain_node, cbr_ledger, "Запись транзакций", "Smart Con
 
 ' Дополнительные интеграции
 Rel(payment_api, merchant_acq, "Эквайринг", "ISO 8583\n(комиссия 0.3%)")
+
+' Безопасность
 Rel(auth_service, gosuslugi, "Верификация клиентов", "SOAP")
+Rel(mobile_app, auth_service, "Верификация клиентов", "gRPC")
+Rel(web_app, auth_service, "Верификация клиентов", "gRPC")
+Rel(merchant_portal, auth_service, "Верификация клиентов", "gRPC")
 
 ' Аудит и аналитика
 Rel(audit_service, dwh, "Выгрузка данных", "ETL")
@@ -80,7 +92,6 @@ Rel(audit_service, cbr_gateway, "Отчетность", "SFTP")
 ' === Легенда и примечания ===
 note right of cbr_system
   <b>Особенности ЦФР:</b>
-  • Невозможность начисления %
   • Прозрачность всех транзакций
   • Офлайн-режим (по концепции ЦБ)
 end note
